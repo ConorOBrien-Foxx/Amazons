@@ -1,0 +1,72 @@
+#state-menu {
+
+}
+#state-playing {
+    /* display: none; */
+}
+
+#gameList td, #gameList th {
+    padding: 6px;
+}
+
+#game {
+    border-collapse: collapse;
+    color: black;
+}
+
+#game td {
+    --cell-width: 45px;
+    width: var(--cell-width);
+    height: var(--cell-width);
+    border: 1px solid;
+    background-color: #333;
+    text-align: center;
+    vertical-align: center;
+    transition: box-shadow 0.1s;
+    /* transition: background-color 0.1s; */
+    font-size: 30px;
+    /* font-size: 60px; */
+    -ms-user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+}
+
+#game td.piece {
+    /* cursor: pointer; */
+}
+
+#game td.cell-white {
+    background-color: #fad693;
+}
+
+#game td.cell-black {
+    background-color: #916a21;
+}
+
+#game td.cell-white.focused {
+    background-color: #fff5e2;
+}
+
+#game td.cell-black.focused {
+    background-color: #d19b35;
+}
+
+#game td.cell-white.valid,
+#game td.cell-black.valid {
+    cursor: pointer;
+    box-shadow: inset 0px 0px 30px cyan;
+}
+
+#game td.cell-white.valid-firing,
+#game td.cell-black.valid-firing {
+    cursor: pointer;
+    box-shadow: inset 0px 0px 30px #f98140, inset 0px 0px 30px #f98140;
+}
+
+#game td.cell-burnt-black,
+#game td.cell-burnt-white
+{
+    /* background-color: rgb(180, 90, 0); */
+    box-shadow: inset 0px 0px 30px #331111, inset 0px 0px 30px #331111;
+}
