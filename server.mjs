@@ -168,17 +168,41 @@ wss.on("connection", socket => {
     // but it also doesn't need to be secure. so whatever
     let data = {
         userId: null,
+        getUser() {
+            return Users[this.userId];
+        },
     };
     socket.on("message", rawJson => {
         let json = JSON.parse(rawJson);
         let { type, userId, serverToken } = json;
-        // todo: reject if serverToken is incorrect
+        // reject if serverToken is incorrect
+        if(serverToken !== SERVER_TOKEN) {
+            socket.send(JSON.stringify({
+                type: "error",
+                action: "refresh",
+                message: "The server has restarted, please refresh",
+            }));
+            return;
+        }
+        // reject if userId isn't communicating on the right channel
+        if(type !== "sync" && data.userId !== userId) {
+            socket.send(JSON.stringify({
+                type: "error",
+                action: "refresh",
+                message: "Incongruent user IDs",
+            }));
+            return;
+        }
+
         let response;
         switch(type) {
             case "sync":
                 data.userId = userId;
                 Users[userId].socket = socket;
-                console.log("synced");
+                console.log("synced with user", userId);
+                break;
+            case "join-game":
+                console.log("User", userId, "wishes to join a game, id =", json.roomId);
                 break;
             default:
                 response = {
@@ -186,6 +210,9 @@ wss.on("connection", socket => {
                     message: `Could not parse input request type ${type}.`
                 };
                 break;
+        }
+        if(response?.type !== "error") {
+            data.getUser().expires = expiryFromNow();
         }
         if(response) {
             socket.send(JSON.stringify(response));

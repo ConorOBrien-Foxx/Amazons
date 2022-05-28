@@ -41,6 +41,14 @@ class SocketWrapper {
         this.socket = null;
     }
 
+    sendJSON(json) {
+        this.send(JSON.stringify(json));
+    }
+
+    send(data) {
+        this.socket.send(data);
+    }
+
     connect(attemptsLeft=3) {
         if(attemptsLeft === 0) {
             this.crash("Could not reconnect after 3 tries.");
@@ -49,11 +57,11 @@ class SocketWrapper {
         this.socket = new WebSocket("ws://localhost:8080");
         // Connection opened
         this.socket.addEventListener("open", (event) => {
-            this.socket.send(JSON.stringify({
+            this.sendJSON({
                 type: "sync",
                 serverToken: this.userData.serverToken,
                 userId: this.userData.userId,
-            }));
+            });
         });
         // Listen for messages
         this.socket.addEventListener("message", (event) => {
@@ -62,6 +70,9 @@ class SocketWrapper {
                 case "error":
                     alert("ERROR: " + json.message);
                     break;
+            }
+            if(json.action === "refresh") {
+                window.location.reload();
             }
         });
         this.socket.addEventListener("close", async (event) => {
@@ -85,6 +96,11 @@ class SocketWrapper {
 
 const LOCAL_STORAGE_KEY = "AmazonsGameCOBFOXX";
 window.addEventListener("load", async function () {
+    const checkRooms = document.getElementById("checkRooms");
+    const roomList = document.getElementById("roomList");
+    const userIdElement = document.getElementById("userId");
+
+    ///// connect to server /////
     // sync version information
     if(!localStorage[LOCAL_STORAGE_KEY]) {
         localStorage[LOCAL_STORAGE_KEY] = "{}";
@@ -101,6 +117,7 @@ window.addEventListener("load", async function () {
     let newData = userData.serverToken ? userData : await postJSON("/newuser");
     userData.serverToken = newData.serverToken;
     userData.userId = newData.userId;
+    userIdElement.textContent = userData.userId;
     localStorage[LOCAL_STORAGE_KEY] = JSON.stringify(userData);
 
     let socket = new SocketWrapper(userData);
@@ -111,9 +128,7 @@ window.addEventListener("load", async function () {
         // LOCAL_STORAGE_KEY
     });
 
-    const checkRooms = document.getElementById("checkRooms");
-    const roomList = document.getElementById("roomList");
-
+    // dom stuff
     checkRooms.addEventListener("click", async function () {
         let { rooms } = await fetchJSON("/rooms");
 
@@ -122,8 +137,13 @@ window.addEventListener("load", async function () {
             let tr = document.createElement("tr");
             let button = makeElement("button", "join");
             button.addEventListener("click", function () {
-
-            })
+                socket.sendJSON({
+                    type: "join-game",
+                    roomId: id,
+                    userId: userData.userId,
+                    serverToken: userData.serverToken,
+                });
+            });
             tr.appendChild(makeElement("td", button));
             tr.appendChild(makeElement("td", name));
             tr.appendChild(makeElement("td", owner));
