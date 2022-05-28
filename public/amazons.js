@@ -1,7 +1,3 @@
-// 0 = white
-// 1 = black
-// 2 = white start
-// 3 = black start
 let random = (min, max) =>
     max === undefined
         ? random(0, min)
@@ -31,19 +27,19 @@ class Piece {
         this.i = i;
         this.j = j;
     }
-    
+
     clone() {
         return new this.constructor(this.color, this.i, this.j);
     }
-    
+
     *validMoves() {
         return;
     }
-    
+
     *captureMoves(cellOpen) {
         yield* this.validMoves(cellOpen);
     }
-    
+
     *captureEffect(i, j) {
         yield [i, j];
     }
@@ -80,12 +76,13 @@ class Amazon extends Piece {
             }
         }
     }
-    
-    getSymbol() {
+
+    // white uses uppercase, black uses lowercase
+    getSymbol(unicode=true) {
         return [
-            "♛",
-            "♕",
-        ][this.color];
+            ["a", "♛"],
+            ["A", "♕"],
+        ][this.color][+unicode];
     }
 }
 
@@ -111,12 +108,12 @@ class Steed extends Piece {
             }
         }
     }
-    
-    getSymbol() {
+
+    getSymbol(unicode=true) {
         return [
-            "♞",
-            "♘",
-        ][this.color];
+            ["s", "♞"],
+            ["S", "♘"],
+        ][this.color][+unicode];
     }
 };
 
@@ -146,7 +143,7 @@ class Bomber extends Piece {
             }
         }
     }
-    
+
     *captureMoves(cellOpen) {
         for(let dir of BomberDeltas) {
             let path = [...pointsInDirection(this, dir, 2)];
@@ -156,19 +153,19 @@ class Bomber extends Piece {
             }
         }
     }
-    
+
     *captureEffect(ci, cj) {
         let di = Math.sign(ci - this.i);
         let dj = Math.sign(cj - this.j);
         yield* pointsInDirection(this, [di, dj], 2);
     }
-    
-    getSymbol() {
+
+    getSymbol(unicode=true) {
         return [
-            "♜",
-            "♖",
-        ][this.color];
-    }   
+            ["b", "♜"],
+            ["B", "♖"],
+        ][this.color][+unicode];
+    }
 }
 
 let deepClone = function (arr) {
@@ -220,7 +217,7 @@ class Board {
         this.reset();
         this.silent = false;
     }
-    
+
     reset() {
         this.grid = deepClone(this.sourceGrid);
         this.pieces = deepClone(this.config);
@@ -233,7 +230,7 @@ class Board {
         this.turn = 1;
         this.playing = true;
     }
-    
+
     static getColor(n) {
         return [
             "black",
@@ -242,11 +239,11 @@ class Board {
             "burnt-white",
         ][n];
     }
-    
+
     pieceAt(i, j) {
         return this.pieces.find(piece => piece.i === i && piece.j === j);
     }
-    
+
     validMovesLeft(turnPlayer = this.turnPlayer) {
         let totalMoves = 0;
         for(let piece of this.pieces) {
@@ -254,10 +251,10 @@ class Board {
                 totalMoves += this.validMoves(piece).length;
             }
         }
-        
+
         return totalMoves;
     }
-    
+
     gameOverTest() {
         if(this.validMovesLeft() === 0) {
             if(!this.silent) {
@@ -268,7 +265,7 @@ class Board {
             this.playing = false;
         }
     }
-    
+
     cellOpen(i, j) {
         return (
             !!this.grid[i] &&
@@ -279,11 +276,11 @@ class Board {
             !this.pieceAt(i, j)
         );
     }
-    
+
     validMoves(piece) {
         return [...piece.validMoves(this.cellOpen.bind(this))];
         /*
-        
+
         let moves = [];
         let { i, j } = piece;
         for(let dir of directions) {
@@ -300,29 +297,29 @@ class Board {
         return moves;
         */
     }
-    
+
     captureMoves(piece) {
         return [...piece.captureMoves(this.cellOpen.bind(this))];
     }
-    
+
     hasMoves(piece) {
         return this.validMoves(piece).length !== 0;
     }
-    
+
     nextTurn() {
         this.turn++;
         this.gameOverTest();
         // this.turnPlayer = this.turn % this.playerCount;
     }
-    
+
     get turnPlayer() {
         return this.turn % this.playerCount;
     }
-    
+
     fireAt(i, j) {
         this.grid[i][j] += 2;
     }
-    
+
     initialize(game, info) {
         let i = 0;
         this.game = game;
@@ -338,11 +335,11 @@ class Board {
                 td.addEventListener("click", (function (i, j) {
                     return function (ev) {
                         let piece = this.pieceAt(i, j);
-                        
+
                         let anyHighlighted = this.highlighted.find(
                             ([ti, tj]) => ti === i && tj === j
                         );
-                        
+
                         if(this.firing) {
                             if(this.firingPiece && anyHighlighted) {
                                 for(let [ ti, tj ] of this.firingPiece.captureEffect(i, j)) {
@@ -398,7 +395,7 @@ class Board {
             i++;
         }
     }
-    
+
     cellMap(fn) {
         this.elements.forEach((row, i) => {
             row.forEach((cell, j) => {
@@ -407,7 +404,7 @@ class Board {
             });
         });
     }
-    
+
     render() {
         if(this.silent) {
             return;
@@ -449,17 +446,17 @@ class Board {
             // let col = Board.getColor(this.focused.color);
             this.elements[ci][cj].classList.add(name);
         }
-        
+
         if(this.focused) {
             this.elements[this.focused.i][this.focused.j].classList.add("focused");
         }
-        
+
         // information
         // console.log(this.info);
         this.info.querySelector("#turnnumber").textContent = this.turn;
         this.info.querySelector("#turnplayer").textContent = Board.getColor(this.turnPlayer);
     }
-    
+
     randomMove() {
         if(this.firing) {
             notice("Cannot do a random move while moving.");
@@ -472,33 +469,33 @@ class Board {
             .filter(piece => piece.color === this.turnPlayer);
         shuffleInPlace(turnPieces);
         // console.log(turnPieces);
-        
+
         let piece, possibleMoves = [];
         for(piece of turnPieces) {
             possibleMoves = this.validMoves(piece);
             if(possibleMoves.length > 0) break;
         }
-        
+
         if(possibleMoves.length === 0) {
             notice("No moves available");
             // this.nextTurn();
             // this.render();
             return;
         }
-        
+
         let move = sample(possibleMoves);
-        
+
         // console.log(move, piece);
-        
+
         piece.i = move[0];
         piece.j = move[1];
-        
+
         // console.log(move, piece);
         // notice("pausing");
-        
+
         let possibleFires = [...this.captureMoves(piece)];
         shuffleInPlace(possibleFires);
-        
+
         for(let fire of possibleFires) {
             let fired = false;
             let [i, j] = fire;
@@ -510,11 +507,11 @@ class Board {
             }
             if(fired) break;
         }
-        
+
         this.nextTurn();
         this.render();
     }
-    
+
     runRandom() {
         while(this.playing) {
             this.randomMove();

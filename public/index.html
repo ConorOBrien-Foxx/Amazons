@@ -11,22 +11,18 @@
     <h1>Amazons</h1>
     <div id="state-menu">
         <h2>List of rooms</h2>
-        <table id="gameList">
-            <tr>
-                <th></th>
-                <th>Name</th>
-                <th>Owner</th>
-                <th>Configuration</th>
-                <th>Made</th>
-            </tr>
-            <tr>
-                <td><button>join game</button></td>
-                <td>Dummy game</td>
-                <td>B1g dummy</td>
-                <td>Classic</td>
-                <!-- lazy js hack wooooo -->
-                <td><script>document.write((new Date()).toString().split(" ").slice(1,5).join(" "));</script></td>
-            </tr>
+        <button id="checkRooms">check rooms</button>
+        <table id="listing">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Name</th>
+                    <th>Owner</th>
+                    <th>Configuration</th>
+                    <th>Made</th>
+                </tr>
+            </thead>
+            <tbody id="roomList"></tbody>
         </table>
         <h2>New game options</h2>
         <div id="configInfo">
@@ -45,7 +41,7 @@
             <p id="message">--</p>
         </div>
         <table id="game">
-            
+
         </table>
         <button id="reset">reset</button>
         <button id="randomMove">random move</button>
