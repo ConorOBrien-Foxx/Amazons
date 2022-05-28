@@ -35,6 +35,7 @@ const makeElement = (tag, child=null) => {
     return el;
 };
 
+let switchPlaying;
 class SocketWrapper {
     constructor(data) {
         this.userData = data;
@@ -70,6 +71,16 @@ class SocketWrapper {
                 case "error":
                     alert("ERROR: " + json.message);
                     break;
+                case "update":
+                    switch(json.action) {
+                        case "rooms":
+                            checkRooms();
+                            break;
+                        case "playing":
+                            switchPlaying();
+                            break;
+                    }
+                    break;
             }
             if(json.action === "refresh") {
                 window.location.reload();
@@ -94,18 +105,53 @@ class SocketWrapper {
     }
 }
 
+let socket, userData;
+const checkRooms = async function () {
+    let { rooms } = await fetchJSON("/rooms");
+
+    clearChildren(roomList);
+    for(let { id, status, name, players, config, timestamp } of Object.values(rooms)) {
+        let tr = document.createElement("tr");
+        let button = makeElement("button", status == "Closed" ? "spectate" : "join");
+        button.addEventListener("click", function () {
+            socket.sendJSON({
+                type: "join-game",
+                roomId: id,
+                userId: userData.userId,
+                serverToken: userData.serverToken,
+            });
+        });
+        tr.appendChild(makeElement("td", button));
+        tr.appendChild(makeElement("td", status));
+        tr.appendChild(makeElement("td", name));
+        let ol = makeElement("ol");
+        let li1 = makeElement("li", players[0] ?? "none");
+        let li2 = makeElement("li", players[1] ?? "none");
+        ol.appendChild(li1);
+        ol.appendChild(li2);
+        tr.appendChild(makeElement("td", ol));
+        tr.appendChild(makeElement("td", config));
+        tr.appendChild(makeElement("td", timestamp));
+        roomList.appendChild(tr);
+    }
+}
+
 const LOCAL_STORAGE_KEY = "AmazonsGameCOBFOXX";
 window.addEventListener("load", async function () {
-    const checkRooms = document.getElementById("checkRooms");
+    const checkRoomsButton = document.getElementById("checkRooms");
     const roomList = document.getElementById("roomList");
     const userIdElement = document.getElementById("userId");
+    const newGameButton = document.getElementById("newGame");
+
+    const stateMenuDisplay = document.getElementById("state-menu");
+    const statePlayingDisplay = document.getElementById("state-playing");
 
     ///// connect to server /////
     // sync version information
     if(!localStorage[LOCAL_STORAGE_KEY]) {
         localStorage[LOCAL_STORAGE_KEY] = "{}";
     }
-    let userData = JSON.parse(localStorage[LOCAL_STORAGE_KEY]);
+    userData = JSON.parse(localStorage[LOCAL_STORAGE_KEY]);
 
     if(userData.serverToken) {
         let { serverToken: actualToken } = await fetchJSON("/version");
@@ -120,7 +166,7 @@ window.addEventListener("load", async function () {
     userIdElement.textContent = userData.userId;
     localStorage[LOCAL_STORAGE_KEY] = JSON.stringify(userData);
 
-    let socket = new SocketWrapper(userData);
+    socket = new SocketWrapper(userData);
     socket.connect();
 
     window.addEventListener("beforeunload", function () {
@@ -129,28 +175,22 @@ window.addEventListener("load", async function () {
     });
 
     // dom stuff
-    checkRooms.addEventListener("click", async function () {
-        let { rooms } = await fetchJSON("/rooms");
+    checkRoomsButton.addEventListener("click", checkRooms);
+    checkRooms();
 
-        clearChildren(roomList);
-        for(let { id, name, owner, config, timestamp } of rooms) {
-            let tr = document.createElement("tr");
-            let button = makeElement("button", "join");
-            button.addEventListener("click", function () {
-                socket.sendJSON({
-                    type: "join-game",
-                    roomId: id,
-                    userId: userData.userId,
-                    serverToken: userData.serverToken,
-                });
-            });
-            tr.appendChild(makeElement("td", button));
-            tr.appendChild(makeElement("td", name));
-            tr.appendChild(makeElement("td", owner));
-            tr.appendChild(makeElement("td", config));
-            tr.appendChild(makeElement("td", timestamp));
-            roomList.appendChild(tr);
-        }
+    switchPlaying = () => {
+        stateMenuDisplay.style.display = "none";
+        statePlayingDisplay.style.display = "block";
+    };
+
+    newGameButton.addEventListener("click", async function () {
+        socket.sendJSON({
+            type: "make-game",
+            name: "Test",
+            config: "Advanced",
+            userId: userData.userId,
+            serverToken: userData.serverToken,
+        });
     });
 
     let game = document.getElementById("game");

@@ -60,9 +60,8 @@ const expiryFromNow = () => {
 
 const Users = {};
 const maxInt = 36**10;
-const makeNewUser = () => {
-    if(Object.keys(Users).length >= maxInt) {
-        // we can't make a user
+const makeNewPool = (obj) => {
+    if(Object.keys(obj).length > maxInt) {
         return null;
     }
     let id;
@@ -70,10 +69,17 @@ const makeNewUser = () => {
         id = Math.floor(Math.random() * maxInt)
             .toString(36)
             .padStart(10, "0");
-    } while(Users[id]);
+    } while(obj[id]);
+    return id;
+};
+
+const makeNewUser = () => {
+    let id = makeNewPool(Users);
+    if(!id) return null;
     Users[id] = {
         expires: expiryFromNow(),
         socket: null,
+        room: null,
     };
     return id;
 };
@@ -126,25 +132,14 @@ app.post("/enduser", function (req, res, next) {
     }));
 });
 
+const Rooms = {};
+const makeNewRoomId = () => {
+    return makeNewPool(Rooms);
+}
 app.get("/rooms", function (req, res, next) {
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({
-        rooms: [
-            {
-                id: 1,
-                name: "Dummy game",
-                owner: "B1g dummy",
-                config: "Classic",
-                timestamp: 1653689171916,
-            },
-            {
-                id: 2,
-                name: "suave game",
-                owner: "epic gamer",
-                config: "Advanced",
-                timestamp: 1653690312701,
-            }
-        ]
+        rooms: Rooms
     }));
 });
 
@@ -160,10 +155,28 @@ app.use(express.static(
     { extensions: ["html", "css", "js"] }
 ));
 
+const sendJSON = (socket, json) => socket.send(JSON.stringify(json));
+const update = (socket, action) => sendJSON(socket, {
+    type: "update",
+    action
+})
+const updateRooms = socket => update(socket, "rooms");
+
+const startGame = roomId => {
+    let room = Rooms[roomId];
+    for(let pid of room.players) {
+        let user = Users[pid];
+        console.log("hooking up player", pid);
+        update(user.socket, "playing");
+    }
+};
+
 // websocket
 const wss = new WebSocketServer({ noServer: true });
+const sockets = [];
 wss.on("connection", socket => {
     console.log("new socket");
+    sockets.push(socket);
     // i mean. on the one hand i'm not doing any serious checks
     // but it also doesn't need to be secure. so whatever
     let data = {
@@ -177,20 +190,20 @@ wss.on("connection", socket => {
         let { type, userId, serverToken } = json;
         // reject if serverToken is incorrect
         if(serverToken !== SERVER_TOKEN) {
-            socket.send(JSON.stringify({
+            sendJSON(socket, {
                 type: "error",
                 action: "refresh",
                 message: "The server has restarted, please refresh",
-            }));
+            });
             return;
         }
         // reject if userId isn't communicating on the right channel
         if(type !== "sync" && data.userId !== userId) {
-            socket.send(JSON.stringify({
+            sendJSON(socket, {
                 type: "error",
                 action: "refresh",
                 message: "Incongruent user IDs",
-            }));
+            });
             return;
         }
 
@@ -202,7 +215,46 @@ wss.on("connection", socket => {
                 console.log("synced with user", userId);
                 break;
             case "join-game":
-                console.log("User", userId, "wishes to join a game, id =", json.roomId);
+                // json.roomId
+                console.log("User", userId, "is joining", json.roomId);
+                console.log(Rooms[json.roomId].players.length);
+                if(Rooms[json.roomId].status == "Closed") {
+                    // todo: spectate
+                }
+                else if(Rooms[json.roomId].players.length < 2) {
+                    if(Users[userId].room) {
+                        let oldRoom = Rooms[Users[userId].room];
+                        oldRoom.players.splice(oldRoom.players.indexOf(userId), 1);
+                    }
+                    Users[userId].room = json.roomId;
+                    Rooms[json.roomId].players.push(userId);
+
+                    if(Rooms[json.roomId].players.length == 2) {
+                        Rooms[json.roomId].status = "Closed";
+                        startGame(json.roomId);
+                    }
+
+                    sockets.forEach(updateRooms);
+                }
+                else {
+                    sendJSON(socket, {
+                        type: "error",
+                        message: "Room is full.",
+                    });
+                }
+                break;
+            case "make-game":
+                console.log("making room");
+                let id = makeNewRoomId();
+                Rooms[id] = {
+                    id: id,
+                    name: json.name,
+                    players: [],
+                    config: json.config,
+                    status: "Open",
+                    timestamp: Date.now(),
+                };
+                sockets.forEach(updateRooms);
                 break;
             default:
                 response = {
@@ -215,11 +267,12 @@ wss.on("connection", socket => {
             data.getUser().expires = expiryFromNow();
         }
         if(response) {
-            socket.send(JSON.stringify(response));
+            sendJSON(socket, response);
         }
     });
     socket.on("close", () => {
         console.log("socket closed");
+        sockets.splice(sockets.indexOf(socket), 1);
     });
 });
 

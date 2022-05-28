@@ -2,7 +2,7 @@
 
 }
 #state-playing {
-    /* display: none; */
+    display: none;
 }
 
 #listing td, #listing th {
