@@ -9,7 +9,7 @@
 </head>
 <body>
     <h1>Amazons</h1>
-    <p>User id: <strong><span id="userId"></span></strong></p>
+    <p>User id: <strong><span id="userId"></span></strong> <label for="nickname">Nickname: </label><input id="nickname"></p>
     <div id="state-menu">
         <h2>List of rooms</h2>
         <button id="checkRooms">check rooms</button>
@@ -17,8 +17,8 @@
             <thead>
                 <tr>
                     <th></th>
-                    <th>Name</th>
                     <th>Status</th>
+                    <th>Name</th>
                     <th>Players</th>
                     <th>Configuration</th>
                     <th>Made</th>
@@ -30,7 +30,7 @@
         <div id="configInfo">
             <p>Classic: 10x10, 4 Amazons each side</p>
             <p>Advanced: 10x10, 4 Amazons, 2 Steeds, 2 Bombers each side</p>
-            <label for="config">Configuration: </label><select id="config">
+            <label for="roomname">Room name:</label> <input id="roomname"> <label for="config">Configuration: </label><select id="config">
                 <option>Classic</option>
                 <option>Advanced</option>
             </select>

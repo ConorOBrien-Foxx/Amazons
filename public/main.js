@@ -35,11 +35,17 @@ const makeElement = (tag, child=null) => {
     return el;
 };
 
+const crash = message => {
+    document.body.textContent = "";
+    alert(message);
+};
+
 let switchPlaying;
 class SocketWrapper {
     constructor(data) {
         this.userData = data;
         this.socket = null;
+        this.crashed = false;
     }
 
     sendJSON(json) {
@@ -51,8 +57,10 @@ class SocketWrapper {
     }
 
     connect(attemptsLeft=3) {
+        // don't attempt to connect if we are crashed
+        if(this.crashed) return;
         if(attemptsLeft === 0) {
-            this.crash("Could not reconnect after 3 tries.");
+            crash("Could not reconnect after 3 tries.");
             return;
         }
         this.socket = new WebSocket("ws://localhost:8080");
@@ -69,12 +77,18 @@ class SocketWrapper {
             let json = JSON.parse(event.data);
             switch(json.type) {
                 case "error":
-                    alert("ERROR: " + json.message);
+                    if(json.action === "crash") {
+                        this.crashed = true;
+                        crash("FATAL ERROR: " + json.message);
+                    }
+                    else {
+                        alert("ERROR: " + json.message);
+                    }
                     break;
                 case "update":
                     switch(json.action) {
                         case "rooms":
-                            checkRooms();
+                            checkRooms(userData.userId);
                             break;
                         case "playing":
                             switchPlaying();
@@ -94,28 +108,28 @@ class SocketWrapper {
                 this.connect(attemptsLeft - 1);
             }
             catch(e) {
-                this.crash("The server is down. Please try again later.");
+                crash("The server is down. Please try again later.");
             }
         });
-    }
-
-    crash(message) {
-        document.body.textContent = "";
-        alert(message);
     }
 }
 
 let socket, userData;
-const checkRooms = async function () {
+const checkRooms = async function (userId) {
     let { rooms } = await fetchJSON("/rooms");
 
     clearChildren(roomList);
     for(let { id, status, name, players, config, timestamp } of Object.values(rooms)) {
         let tr = document.createElement("tr");
-        let button = makeElement("button", status == "Closed" ? "spectate" : "join");
+        let action = players.includes(userId)
+            ? "leave"
+            : status == "Closed"
+                 ? "spectate"
+                 : "join"
+        let button = makeElement("button", action);
         button.addEventListener("click", function () {
             socket.sendJSON({
-                type: "join-game",
+                type: `${action}-game`,
                 roomId: id,
                 userId: userData.userId,
                 serverToken: userData.serverToken,
@@ -136,12 +150,19 @@ const checkRooms = async function () {
     }
 }
 
+const ADJECTIVES = "PURPLE ROUGH NEAT UNTIMELY SQUARE FURIOUS SKITTISH DIM INFINITE LOUD PERFECT QUESTIONING".split(" ");
+const NOUNS = "SPAGHETTI CAVES QUESTION THERMOMETER CARD JESTER PLAN EYES CHART NIGHTS BOXES LAPTOP MUG".split(" ");
+const randomEnglish = () =>
+    sample(ADJECTIVES) + " " + sample(NOUNS);
+
 const LOCAL_STORAGE_KEY = "AmazonsGameCOBFOXX";
 window.addEventListener("load", async function () {
     const checkRoomsButton = document.getElementById("checkRooms");
     const roomList = document.getElementById("roomList");
     const userIdElement = document.getElementById("userId");
     const newGameButton = document.getElementById("newGame");
+    const nicknameInput = document.getElementById("nickname");
+    nicknameInput.placeholder = randomEnglish();
 
     const stateMenuDisplay = document.getElementById("state-menu");
     const statePlayingDisplay = document.getElementById("state-playing");
@@ -175,19 +196,22 @@ window.addEventListener("load", async function () {
     });
 
     // dom stuff
-    checkRoomsButton.addEventListener("click", checkRooms);
-    checkRooms();
+    checkRoomsButton.addEventListener("click", () => checkRooms(userData.userId));
+    checkRooms(userData.userId);
 
     switchPlaying = () => {
         stateMenuDisplay.style.display = "none";
         statePlayingDisplay.style.display = "block";
     };
 
+    const configSelect = document.getElementById("config");
+    const roomName = document.getElementById("roomname");
+    roomName.placeholder = randomEnglish();
     newGameButton.addEventListener("click", async function () {
         socket.sendJSON({
             type: "make-game",
             name: "Test",
-            config: "Advanced",
+            config: configSelect.value,
             userId: userData.userId,
             serverToken: userData.serverToken,
         });

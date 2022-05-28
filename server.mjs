@@ -159,7 +159,12 @@ const sendJSON = (socket, json) => socket.send(JSON.stringify(json));
 const update = (socket, action) => sendJSON(socket, {
     type: "update",
     action
-})
+});
+const error = (socket, message, extra={}) => sendJSON(socket, {
+    type: "error",
+    message,
+    ...extra
+});
 const updateRooms = socket => update(socket, "rooms");
 
 const startGame = roomId => {
@@ -171,9 +176,49 @@ const startGame = roomId => {
     }
 };
 
+const CONFIGS = ["Classic", "Advanced"];
+
 // websocket
 const wss = new WebSocketServer({ noServer: true });
 const sockets = [];
+
+const leaveRoom = userId => {
+    let oldRoom = Rooms[Users[userId].room];
+    oldRoom.players.splice(oldRoom.players.indexOf(userId), 1);
+    Users[userId].room = null;
+};
+
+// returns true if we need to update the room view
+const joinGame = (socket, userId, roomId) => {
+    if(Rooms[roomId].status == "Closed") {
+        // TODO: spectate
+        return false;
+    }
+    else if(Users[userId].room == roomId) {
+        // no need to do anything if you're joining the same room
+        return false;
+    }
+    else if(Rooms[roomId].players.length < 2) {
+        if(Users[userId].room) {
+            leaveRoom(userId);
+        }
+        Users[userId].room = roomId;
+        Rooms[roomId].players.push(userId);
+
+        if(Rooms[roomId].players.length == 2) {
+            Rooms[roomId].status = "Closed";
+            startGame(roomId);
+        }
+
+        return true;
+    }
+    else {
+        error(socket, "Room is full.");
+        return false;
+    }
+};
+
+// TODO: localization?
 wss.on("connection", socket => {
     console.log("new socket");
     sockets.push(socket);
@@ -190,60 +235,64 @@ wss.on("connection", socket => {
         let { type, userId, serverToken } = json;
         // reject if serverToken is incorrect
         if(serverToken !== SERVER_TOKEN) {
-            sendJSON(socket, {
-                type: "error",
-                action: "refresh",
-                message: "The server has restarted, please refresh",
+            error(socket, "The server has restarted, please refresh", {
+                action: "refresh"
             });
             return;
         }
         // reject if userId isn't communicating on the right channel
         if(type !== "sync" && data.userId !== userId) {
-            sendJSON(socket, {
-                type: "error",
-                action: "refresh",
-                message: "Incongruent user IDs",
+            error(socket, "Incongruent user IDs", {
+                action: "refresh"
             });
             return;
         }
 
         let response;
+        console.table(json);
         switch(type) {
             case "sync":
+                if(Users[userId].socket) {
+                    // if the user opens a new socket, kill the old one
+                    error(Users[userId].socket, "New socket opened, closing old one", {
+                        action: "crash"
+                    });
+                    Users[userId].socket.close();
+                }
                 data.userId = userId;
                 Users[userId].socket = socket;
                 console.log("synced with user", userId);
                 break;
+
             case "join-game":
                 // json.roomId
-                console.log("User", userId, "is joining", json.roomId);
-                console.log(Rooms[json.roomId].players.length);
-                if(Rooms[json.roomId].status == "Closed") {
-                    // todo: spectate
-                }
-                else if(Rooms[json.roomId].players.length < 2) {
-                    if(Users[userId].room) {
-                        let oldRoom = Rooms[Users[userId].room];
-                        oldRoom.players.splice(oldRoom.players.indexOf(userId), 1);
-                    }
-                    Users[userId].room = json.roomId;
-                    Rooms[json.roomId].players.push(userId);
-
-                    if(Rooms[json.roomId].players.length == 2) {
-                        Rooms[json.roomId].status = "Closed";
-                        startGame(json.roomId);
-                    }
-
+                if(joinGame(socket, userId, json.roomId)) {
                     sockets.forEach(updateRooms);
                 }
+                break;
+
+            case "leave-game":
+                if(json.roomId !== Users[userId].room) {
+                    error(socket, "Cannot leave a room you are not in");
+                }
                 else {
-                    sendJSON(socket, {
-                        type: "error",
-                        message: "Room is full.",
-                    });
+                    leaveRoom(userId);
+                    sockets.forEach(updateRooms);
                 }
                 break;
+
+            case "spectate-game":
+                error(socket, "Spectation is not currently implemented.");
+                // sockets.forEach(updateRooms);
+                break;
+
             case "make-game":
+                // validate room
+                if(!CONFIGS.includes(json.config)) {
+                    error(socket, "Invalid config: " + json.config);
+                    break;
+                }
+                // make room
                 console.log("making room");
                 let id = makeNewRoomId();
                 Rooms[id] = {
@@ -254,8 +303,12 @@ wss.on("connection", socket => {
                     status: "Open",
                     timestamp: Date.now(),
                 };
+                // join the player to that room
+                joinGame(socket, userId, id);
+                // update everyone's view of the rooms
                 sockets.forEach(updateRooms);
                 break;
+
             default:
                 response = {
                     type: "error",
@@ -263,7 +316,7 @@ wss.on("connection", socket => {
                 };
                 break;
         }
-        if(response?.type !== "error") {
+        if(response && response?.type !== "error") {
             data.getUser().expires = expiryFromNow();
         }
         if(response) {
