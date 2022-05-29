@@ -180,35 +180,6 @@ let deepClone = function (arr) {
     }
 };
 
-let starConfig = [
-    new Amazon(0,  2, 0),
-    new Amazon(0,  3, 5),
-    new Amazon(1,  5, 2),
-    new Amazon(1,  0, 3),
-];
-
-let middleConfig = [
-    new Amazon(0,  2, 2),
-    new Amazon(0,  3, 3),
-    new Amazon(1,  2, 3),
-    new Amazon(1,  3, 2),
-];
-
-let linesConfig = [
-    new Amazon(0,  0, 0),
-    new Amazon(0,  0, 1),
-    new Amazon(0,  0, 2),
-    new Amazon(0,  0, 3),
-    new Amazon(0,  0, 4),
-    new Amazon(0,  0, 5),
-    new Amazon(1,  5, 0),
-    new Amazon(1,  5, 1),
-    new Amazon(1,  5, 2),
-    new Amazon(1,  5, 3),
-    new Amazon(1,  5, 4),
-    new Amazon(1,  5, 5),
-];
-
 class Board {
     static ofWidth(width, config) {
         let grid = [];
@@ -221,13 +192,14 @@ class Board {
         return new Board(grid, config);
     }
 
-    constructor(sourceGrid, config = starConfig) {
+    constructor(sourceGrid, config) {
         this.sourceGrid = sourceGrid;
         this.config = config;
         this.elements = [];
         this.reset();
         this.silent = false;
         this.perspective = null;
+        this.socket = null;
     }
 
     reset() {
@@ -247,6 +219,18 @@ class Board {
         this.perspective = perspective;
     }
 
+    setSocket(socket) {
+        this.socket = socket;
+    }
+
+    deliverMessage() {
+        if(!this.socket) return;
+        this.socket.sendJSON({
+            type: "move",
+            // TODO: fill this out
+        });
+    }
+
     serialize() {
 
     }
@@ -261,6 +245,7 @@ class Board {
     }
 
     pieceAt(i, j) {
+        // TODO: maybe don't linear search to find a piece
         return this.pieces.find(piece => piece.i === i && piece.j === j);
     }
 

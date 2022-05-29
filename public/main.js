@@ -49,7 +49,10 @@ class SocketWrapper {
     }
 
     sendJSON(json) {
-        this.send(JSON.stringify(json));
+        this.send(JSON.stringify({
+            ...this.userData,
+            ...json,
+        }));
     }
 
     send(data) {
@@ -67,9 +70,7 @@ class SocketWrapper {
         // Connection opened
         this.socket.addEventListener("open", (event) => {
             this.sendJSON({
-                type: "sync",
-                serverToken: this.userData.serverToken,
-                userId: this.userData.userId,
+                type: "sync"
             });
         });
         // Listen for messages
