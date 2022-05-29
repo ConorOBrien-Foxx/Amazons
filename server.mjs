@@ -1,4 +1,3 @@
-// const Amazons = require("./amazons.js");
 import express from "express";
 import fs from "fs";
 import path from "path";
@@ -7,8 +6,8 @@ import { spawn } from "child_process";
 import bodyParser from "body-parser";
 import util from "util";
 import { WebSocketServer } from "ws";
+import Amazons from "./public/amazons.js";
 const readdir = util.promisify(fs.readdir);
-
 
 const isLocal = process.argv[2] === "l";
 let __dirname = isLocal ? path.dirname(new URL(import.meta.url).pathname) : "/app";
@@ -80,6 +79,7 @@ const makeNewUser = () => {
         expires: expiryFromNow(),
         socket: null,
         room: null,
+        state: "menu",
     };
     return id;
 };
@@ -143,22 +143,16 @@ app.get("/rooms", function (req, res, next) {
     }));
 });
 
-// app.get("/domains", function (req, res, next) {
-    // res.setHeader("Content-Type", "application/json");
-    // res.end(JSON.stringify({
-        // domains: DOMAIN_INFORMATION,
-    // }));
-// });
-
 app.use(express.static(
     clientDir,
     { extensions: ["html", "css", "js"] }
 ));
 
 const sendJSON = (socket, json) => socket.send(JSON.stringify(json));
-const update = (socket, action) => sendJSON(socket, {
+const update = (socket, action, extra={}) => sendJSON(socket, {
     type: "update",
-    action
+    action,
+    ...extra
 });
 const error = (socket, message, extra={}) => sendJSON(socket, {
     type: "error",
@@ -167,16 +161,28 @@ const error = (socket, message, extra={}) => sendJSON(socket, {
 });
 const updateRooms = socket => update(socket, "rooms");
 
-const startGame = roomId => {
-    let room = Rooms[roomId];
-    for(let pid of room.players) {
-        let user = Users[pid];
-        console.log("hooking up player", pid);
-        update(user.socket, "playing");
-    }
+const startGameForPlayer = pid => {
+    let user = Users[pid];
+    let room = Rooms[user.room];
+    console.log("hooking up player", pid);
+    console.log("User's room:", user.room);
+    user.state = "playing";
+    update(user.socket, "playing", {
+        width: 10,
+        config: room.config,
+        player: room.players.indexOf(pid),
+    });
 };
 
-const CONFIGS = ["Classic", "Advanced"];
+const startGame = roomId => {
+    const { Configs, Board } = Amazons;
+    let room = Rooms[roomId];
+    let config = Configs[room.config]();
+    room.board = Board.ofWidth(10, config);
+    for(let pid of room.players) {
+        startGameForPlayer(pid);
+    }
+};
 
 // websocket
 const wss = new WebSocketServer({ noServer: true });
@@ -248,20 +254,25 @@ wss.on("connection", socket => {
             return;
         }
 
-        let response;
+        let response, user;
         console.table(json);
         switch(type) {
             case "sync":
-                if(Users[userId].socket) {
+                user = Users[userId];
+                if(user.socket) {
                     // if the user opens a new socket, kill the old one
-                    error(Users[userId].socket, "New socket opened, closing old one", {
+                    error(user.socket, "New socket opened, closing old one", {
                         action: "crash"
                     });
-                    Users[userId].socket.close();
+                    user.socket.close();
                 }
                 data.userId = userId;
-                Users[userId].socket = socket;
+                user.socket = socket;
                 console.log("synced with user", userId);
+                // escort them to the appropriate state
+                if(user.state === "playing") {
+                    startGameForPlayer(userId);
+                }
                 break;
 
             case "join-game":
@@ -288,7 +299,7 @@ wss.on("connection", socket => {
 
             case "make-game":
                 // validate room
-                if(!CONFIGS.includes(json.config)) {
+                if(!Amazons.Configs.hasOwnProperty(json.config)) {
                     error(socket, "Invalid config: " + json.config);
                     break;
                 }
@@ -307,6 +318,10 @@ wss.on("connection", socket => {
                 joinGame(socket, userId, id);
                 // update everyone's view of the rooms
                 sockets.forEach(updateRooms);
+                break;
+
+            case "move":
+                
                 break;
 
             default:

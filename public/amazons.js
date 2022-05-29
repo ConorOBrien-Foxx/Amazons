@@ -178,7 +178,7 @@ let deepClone = function (arr) {
     else {
         return arr;
     }
-}
+};
 
 let starConfig = [
     new Amazon(0,  2, 0),
@@ -210,12 +210,24 @@ let linesConfig = [
 ];
 
 class Board {
-    constructor(sourceGrid = grid, config = starConfig) {
+    static ofWidth(width, config) {
+        let grid = [];
+        for(let i = 0; i < width; i++) {
+            grid.push([]);
+            for(let j = 0; j < width; j++) {
+                grid.at(-1).push((i + j + 1) % 2);
+            }
+        }
+        return new Board(grid, config);
+    }
+
+    constructor(sourceGrid, config = starConfig) {
         this.sourceGrid = sourceGrid;
         this.config = config;
         this.elements = [];
         this.reset();
         this.silent = false;
+        this.perspective = null;
     }
 
     reset() {
@@ -229,6 +241,14 @@ class Board {
         this.highlighted = [];
         this.turn = 1;
         this.playing = true;
+    }
+
+    setPerspective(perspective) {
+        this.perspective = perspective;
+    }
+
+    serialize() {
+
     }
 
     static getColor(n) {
@@ -320,6 +340,62 @@ class Board {
         this.grid[i][j] += 2;
     }
 
+    onPieceClick(i, j) {
+        let piece = this.pieceAt(i, j);
+
+        let anyHighlighted = this.highlighted.find(
+            ([ti, tj]) => ti === i && tj === j
+        );
+
+        if(this.firing) {
+            if(this.firingPiece && anyHighlighted) {
+                for(let [ ti, tj ] of this.firingPiece.captureEffect(i, j)) {
+                    if(this.cellOpen(ti, tj)) {
+                        this.fireAt(ti, tj);
+                    }
+                }
+                this.firing = false;
+                this.highlighted = [];
+                this.nextTurn();
+                this.render(game);
+            }
+        }
+        else if(piece && piece.color === this.turnPlayer && this.turnPlayerInteractive) {
+            // toggle
+            // console.log("TOGGLE", this.focused);
+            if(this.focused === piece) {
+                this.focused = null;
+                this.highlighted = [];
+            }
+            else if(this.hasMoves(piece)) {
+                this.focused = piece;
+                this.highlighted = this.validMoves(piece);
+                if(this.highlighted.length === 0) {
+                    this.focused = null;
+                }
+            }
+            this.render(game);
+        }
+        else if(anyHighlighted) {
+            let [ ti, tj ] = anyHighlighted;
+            this.focused.i = ti;
+            this.focused.j = tj;
+            this.highlighted = this.captureMoves(this.focused);
+            let oldFocused = this.focused;
+            this.focused = null;
+            if(this.highlighted.length) {
+                this.firingPiece = oldFocused;
+                this.firing = anyHighlighted;
+            }
+            else {
+                this.firing = false;
+                this.highlighted = [];
+                this.nextTurn();
+            }
+            this.render(game);
+        }
+    }
+
     initialize(game, info) {
         let i = 0;
         this.game = game;
@@ -332,63 +408,9 @@ class Board {
                 let td = document.createElement("td");
                 tr.appendChild(td);
                 this.elements[i][j] = td;
-                td.addEventListener("click", (function (i, j) {
-                    return function (ev) {
-                        let piece = this.pieceAt(i, j);
-
-                        let anyHighlighted = this.highlighted.find(
-                            ([ti, tj]) => ti === i && tj === j
-                        );
-
-                        if(this.firing) {
-                            if(this.firingPiece && anyHighlighted) {
-                                for(let [ ti, tj ] of this.firingPiece.captureEffect(i, j)) {
-                                    if(this.cellOpen(ti, tj)) {
-                                        this.fireAt(ti, tj);
-                                    }
-                                }
-                                this.firing = false;
-                                this.highlighted = [];
-                                this.nextTurn();
-                                this.render(game);
-                            }
-                        }
-                        else if(piece && piece.color === this.turnPlayer) {
-                            // toggle
-                            // console.log("TOGGLE", this.focused);
-                            if(this.focused === piece) {
-                                this.focused = null;
-                                this.highlighted = [];
-                            }
-                            else if(this.hasMoves(piece)) {
-                                this.focused = piece;
-                                this.highlighted = this.validMoves(piece);
-                                if(this.highlighted.length === 0) {
-                                    this.focused = null;
-                                }
-                            }
-                            this.render(game);
-                        }
-                        else if(anyHighlighted) {
-                            let [ ti, tj ] = anyHighlighted;
-                            this.focused.i = ti;
-                            this.focused.j = tj;
-                            this.highlighted = this.captureMoves(this.focused);
-                            let oldFocused = this.focused;
-                            this.focused = null;
-                            if(this.highlighted.length) {
-                                this.firingPiece = oldFocused;
-                                this.firing = anyHighlighted;
-                            }
-                            else {
-                                this.firing = false;
-                                this.highlighted = [];
-                                this.nextTurn();
-                            }
-                            this.render(game);
-                        }
-                    }
-                })(i, j).bind(this));
+                td.addEventListener("click", ((i, j) =>
+                    ev => this.onPieceClick(i, j)
+                )(i, j));
                 j++;
             }
             game.appendChild(tr);
@@ -403,6 +425,10 @@ class Board {
                 fn(cell, val, i, j);
             });
         });
+    }
+
+    get turnPlayerInteractive() {
+        return this.perspective !== null && this.turnPlayer === this.perspective;
     }
 
     render() {
@@ -424,7 +450,7 @@ class Board {
             // console.log(this.elements);
             let el = this.elements[piece.i][piece.j];
             el.textContent = piece.getSymbol();
-            if(piece.color === this.turnPlayer) {
+            if(piece.color === this.turnPlayer && this.turnPlayerInteractive) {
                 el.classList.add("piece");
                 if(!this.firing && this.hasMoves(piece)) {
                     el.classList.add("valid");
@@ -456,7 +482,9 @@ class Board {
         this.info.querySelector("#turnnumber").textContent = this.turn;
         this.info.querySelector("#turnplayer").textContent = Board.getColor(this.turnPlayer);
     }
+}
 
+class BoardSimulation extends Board {
     randomMove() {
         if(this.firing) {
             notice("Cannot do a random move while moving.");
@@ -526,8 +554,45 @@ class Board {
     }
 }
 
+const Configs = {
+    Classic: () => [
+        new Amazon(0,  0, 3),
+        new Amazon(0,  3, 0),
+        new Amazon(0,  0, 6),
+        new Amazon(0,  3, 9),
+
+        new Amazon(1,  6, 0),
+        new Amazon(1,  9, 3),
+        new Amazon(1,  6, 9),
+        new Amazon(1,  9, 6),
+    ],
+    Advanced: () => [
+        new Steed (0,  2, 2),
+        new Steed (0,  2, 7),
+
+        new Amazon(0,  0, 3),
+        new Amazon(0,  3, 0),
+        new Amazon(0,  0, 6),
+        new Amazon(0,  3, 9),
+
+        new Bomber(0, 4, 4),
+        new Bomber(0, 4, 5),
+        new Bomber(1, 5, 4),
+        new Bomber(1, 5, 5),
+
+        new Amazon(1,  6, 0),
+        new Amazon(1,  9, 3),
+        new Amazon(1,  6, 9),
+        new Amazon(1,  9, 6),
+
+        new Steed (1,  7, 2),
+        new Steed (1,  7, 7),
+    ],
+};
+
 if(typeof module !== "undefined") {
     module.exports = {
-        Piece, Amazon, Steed, Bomber, Board
+        Piece, Amazon, Steed, Bomber, Board,
+        Configs
     };
 }
