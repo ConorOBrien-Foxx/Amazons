@@ -172,6 +172,10 @@ const startGameForPlayer = pid => {
         config: room.config,
         player: room.players.indexOf(pid),
     });
+    // TODO: condense into a single message
+    for(let move of room.history) {
+        update(user.socket, "move", move);
+    }
 };
 
 const startGame = roomId => {
@@ -179,6 +183,7 @@ const startGame = roomId => {
     let room = Rooms[roomId];
     let config = Configs[room.config]();
     room.board = Board.ofWidth(10, config);
+    room.board.silent = true;
     for(let pid of room.players) {
         startGameForPlayer(pid);
     }
@@ -313,6 +318,8 @@ wss.on("connection", socket => {
                     config: json.config,
                     status: "Open",
                     timestamp: Date.now(),
+                    board: null,
+                    history: [],
                 };
                 // join the player to that room
                 joinGame(socket, userId, id);
@@ -321,7 +328,23 @@ wss.on("connection", socket => {
                 break;
 
             case "move":
-                
+                // update the player(s) who did not send the update
+                console.log("update move:");
+                console.table(json);
+                let roomId = Users[json.userId].room;
+                let room = Rooms[roomId];
+                for(let userId of room.players) {
+                    if(userId === json.userId) continue;
+                    let user = Users[userId];
+                    // TODO: verify label move
+                    console.log("Sending move to ", userId);
+                    console.log("Has socket?", !!user.socket);
+                    update(user.socket, "move", json.data);
+                    // TODO: update spectators
+                }
+                // update our board as well
+                room.history.push(json.data);
+                room.board.receiveUpdate(json.data);
                 break;
 
             default:

@@ -76,6 +76,8 @@ class SocketWrapper {
         // Listen for messages
         this.socket.addEventListener("message", (event) => {
             let json = JSON.parse(event.data);
+            // console.log("received json message");
+            // console.table(json);
             switch(json.type) {
                 case "error":
                     if(json.action === "crash") {
@@ -93,11 +95,19 @@ class SocketWrapper {
                             break;
                         case "playing":
                             switchPlaying();
-                            console.log("json received", json);
+                            console.log("json received");
                             console.table(json);
                             initializeBoard(json.width, json.config, json.player);
-                            updateBoard(json.data);
+                            // updateBoard(json.data);
                             break;
+                        case "move":
+                            console.log("received move update info");
+                            console.table(json);
+                            updateBoard(json);
+                            break;
+                        default:
+                            console.log("unknown update action");
+
                     }
                     break;
             }
@@ -216,9 +226,10 @@ window.addEventListener("load", async function () {
         board.setPerspective(perspective);
         board.initialize(game, info);
         board.render();
+        board.setSocket(socket);
     };
-    updateBoard = (board) => {
-
+    updateBoard = (json) => {
+        board.receiveUpdate(json);
     };
 
     const configSelect = document.getElementById("config");

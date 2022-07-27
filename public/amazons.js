@@ -223,12 +223,35 @@ class Board {
         this.socket = socket;
     }
 
-    deliverMessage() {
-        if(!this.socket) return;
+    deliverUpdate(obj) {
+        if(!this.socket) {
+            return;
+        }
+        console.log("Sending update!", obj);
         this.socket.sendJSON({
             type: "move",
-            // TODO: fill this out
+            data: obj,
         });
+    }
+
+    receiveUpdate(obj) {
+        console.log("Received update!", obj);
+        switch(obj.label) {
+            case "engageFireEffect":
+            case "setFocus":
+            case "makeMove":
+                this[obj.label](...obj.args.map(e => parseInt(e, 10)));
+                break;
+
+            case "removeFocus":
+                this[obj.label]();
+                break;
+
+            default:
+                console.error("Unhandled update: ", obj);
+                return;
+        }
+        this.render();
     }
 
     serialize() {
@@ -325,23 +348,75 @@ class Board {
         this.grid[i][j] += 2;
     }
 
+    engageFireEffect(i, j) {
+        console.log(">> engageFireEffect", i, j);
+        // fire at all affected pieces
+        for(let [ ti, tj ] of this.firingPiece.captureEffect(i, j)) {
+            if(this.cellOpen(ti, tj)) {
+                this.fireAt(ti, tj);
+            }
+        }
+        // disable firing
+        this.firing = false;
+        this.highlighted = [];
+        this.nextTurn();
+    }
+
+    removeFocus() {
+        console.log(">> removeFocus");
+        this.focused = null;
+        this.highlighted = [];
+    }
+
+    setFocus(i, j) {
+        console.log(">> setFocus", i, j);
+        let piece = this.pieceAt(i, j);
+        this.focused = piece;
+        this.highlighted = this.validMoves(piece);
+        if(this.highlighted.length === 0) {
+            // TODO: restructure this conditional
+            this.focused = null;
+        }
+    }
+
+    makeMove(ti, tj) {
+        console.log(">> makeMove", ti, tj);
+        this.focused.i = ti;
+        this.focused.j = tj;
+        this.highlighted = this.captureMoves(this.focused);
+        let oldFocused = this.focused;
+        this.focused = null;
+        if(this.highlighted.length) {
+            this.firingPiece = oldFocused;
+            this.firing = [ti, tj];//TODO: should this be a state flag?
+            // it might only matter that it's truthy or not
+        }
+        else {
+            this.firing = false;
+            this.highlighted = [];
+            this.nextTurn();
+        }
+    }
+
     onPieceClick(i, j) {
+        // ignore click if we are not interactive
+        if(!this.turnPlayerInteractive) {
+            console.log("You do not permission to move at this time.");
+            return;
+        }
         let piece = this.pieceAt(i, j);
 
-        let anyHighlighted = this.highlighted.find(
+        let clickedHighlighted = this.highlighted.find(
             ([ti, tj]) => ti === i && tj === j
         );
 
         if(this.firing) {
-            if(this.firingPiece && anyHighlighted) {
-                for(let [ ti, tj ] of this.firingPiece.captureEffect(i, j)) {
-                    if(this.cellOpen(ti, tj)) {
-                        this.fireAt(ti, tj);
-                    }
-                }
-                this.firing = false;
-                this.highlighted = [];
-                this.nextTurn();
+            if(this.firingPiece && clickedHighlighted) {
+                this.engageFireEffect(i, j);
+                this.deliverUpdate({
+                    label: "engageFireEffect",
+                    args: [i, j]
+                });
                 this.render(game);
             }
         }
@@ -349,34 +424,31 @@ class Board {
             // toggle
             // console.log("TOGGLE", this.focused);
             if(this.focused === piece) {
-                this.focused = null;
-                this.highlighted = [];
+                // remove focus from focused piece
+                this.removeFocus();
+                this.deliverUpdate({
+                    label: "removeFocus",
+                    args: [],
+                });
             }
             else if(this.hasMoves(piece)) {
-                this.focused = piece;
-                this.highlighted = this.validMoves(piece);
-                if(this.highlighted.length === 0) {
-                    this.focused = null;
-                }
+                // set focus to the piece if it can be moved
+                this.setFocus(i, j);
+                this.deliverUpdate({
+                    label: "setFocus",
+                    args: [i, j]
+                })
             }
-            this.render(game);
+            this.render(game);//TODO: why does this have a parameter?
         }
-        else if(anyHighlighted) {
-            let [ ti, tj ] = anyHighlighted;
-            this.focused.i = ti;
-            this.focused.j = tj;
-            this.highlighted = this.captureMoves(this.focused);
-            let oldFocused = this.focused;
-            this.focused = null;
-            if(this.highlighted.length) {
-                this.firingPiece = oldFocused;
-                this.firing = anyHighlighted;
-            }
-            else {
-                this.firing = false;
-                this.highlighted = [];
-                this.nextTurn();
-            }
+        else if(clickedHighlighted) {
+            // make a move
+            let [ ti, tj ] = clickedHighlighted;
+            this.makeMove(ti, tj);
+            this.deliverUpdate({
+                label: "makeMove",
+                args: [ti, tj]
+            })
             this.render(game);
         }
     }
