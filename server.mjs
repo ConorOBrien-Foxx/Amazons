@@ -9,6 +9,8 @@ import { WebSocketServer } from "ws";
 import Amazons from "./public/amazons.js";
 const readdir = util.promisify(fs.readdir);
 
+// TODO: room pruning
+
 const isLocal = process.argv[2] === "l";
 let __dirname = isLocal ? path.dirname(new URL(import.meta.url).pathname) : "/app";
 
@@ -168,7 +170,6 @@ const startGameForPlayer = pid => {
     console.log("User's room:", user.room);
     user.state = "playing";
     update(user.socket, "playing", {
-        width: 10,
         config: room.config,
         player: room.players.indexOf(pid),
     });
@@ -181,8 +182,8 @@ const startGameForPlayer = pid => {
 const startGame = roomId => {
     const { Configs, Board } = Amazons;
     let room = Rooms[roomId];
-    let config = Configs[room.config]();
-    room.board = Board.ofWidth(10, config);
+    let { width, state } = Configs[room.config]();
+    room.board = Board.ofWidth(width, state);
     room.board.silent = true;
     for(let pid of room.players) {
         startGameForPlayer(pid);
@@ -194,9 +195,14 @@ const wss = new WebSocketServer({ noServer: true });
 const sockets = [];
 
 const leaveRoom = userId => {
-    let oldRoom = Rooms[Users[userId].room];
+    let oldRoomId = Users[userId].room;
+    let oldRoom = Rooms[oldRoomId];
     oldRoom.players.splice(oldRoom.players.indexOf(userId), 1);
     Users[userId].room = null;
+    if(oldRoom.playing) {
+        oldRoom.playing = false;
+        sendChatMessage(`The game is over, user ${userId} disconnected.`, 0, oldRoomId);
+    }
 };
 
 // returns true if we need to update the room view
@@ -226,6 +232,22 @@ const joinGame = (socket, userId, roomId) => {
     else {
         error(socket, "Room is full.");
         return false;
+    }
+};
+
+const sendChatMessage = (content, userId, roomId) => {
+    // TODO: global messages
+    let message = `${userId}: ${content}`;
+    roomId ??= Users[userId].room;
+    let room = Rooms[roomId];
+    room.chatlog.push(message);
+    for(let pid of room.players) {
+        // if(pid === userId) continue;
+        let user = Users[pid];
+        update(user.socket, "chat", {
+            content: message,
+            author: userId,
+        });
     }
 };
 
@@ -320,11 +342,18 @@ wss.on("connection", socket => {
                     timestamp: Date.now(),
                     board: null,
                     history: [],
+                    chatlog: [],
+                    playing: true,
                 };
                 // join the player to that room
                 joinGame(socket, userId, id);
                 // update everyone's view of the rooms
                 sockets.forEach(updateRooms);
+                break;
+
+            case "send-message":
+                console.log("chat message to send:", json.userId, ":", json.content);
+                sendChatMessage(json.content, userId);
                 break;
 
             case "move":
@@ -345,6 +374,11 @@ wss.on("connection", socket => {
                 // update our board as well
                 room.history.push(json.data);
                 room.board.receiveUpdate(json.data);
+
+                if(room.board.gameOverTest()) {
+                    sendChatMessage("The game is over.", 0, roomId);
+                }
+
                 break;
 
             default:

@@ -29,9 +29,11 @@
         <h2>New game options</h2>
         <div id="configInfo">
             <p>Classic: 10x10, 4 Amazons each side</p>
+            <p>Simple: 4x4, 1 Amazon each side</p>
             <p>Advanced: 10x10, 4 Amazons, 2 Steeds, 2 Bombers each side</p>
             <label for="roomname">Room name:</label> <input id="roomname"> <label for="config">Configuration: </label><select id="config">
                 <option>Classic</option>
+                <option>Simple</option>
                 <option>Advanced</option>
             </select>
         </div>
@@ -45,9 +47,15 @@
         <table id="game">
 
         </table>
-        <button id="reset">reset</button>
-        <button id="randomMove">random move</button>
-        <button id="randomGame">random game</button>
+        <button id="leave">leave</button>
+        <h2>Chat</h2>
+        <div>
+            <input id="chat-input"> <button id="chat-send-message">Send</button>
+            <textarea id="chat-log" readonly=""></textarea>
+        </div>
+        <!-- <button id="reset">reset</button> -->
+        <!-- <button id="randomMove">random move</button> -->
+        <!-- <button id="randomGame">random game</button> -->
     </div>
 </body>
 </html>

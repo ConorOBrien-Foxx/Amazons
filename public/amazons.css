@@ -70,3 +70,10 @@
     /* background-color: rgb(180, 90, 0); */
     box-shadow: inset 0px 0px 30px #331111, inset 0px 0px 30px #331111;
 }
+
+#chat-log {
+    display: block;
+    resize: none;
+    width: 90%;
+    height: 7em;
+}

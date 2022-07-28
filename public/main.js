@@ -97,7 +97,7 @@ class SocketWrapper {
                             switchPlaying();
                             console.log("json received");
                             console.table(json);
-                            initializeBoard(json.width, json.config, json.player);
+                            initializeBoard(json.config, json.player);
                             // updateBoard(json.data);
                             break;
                         case "move":
@@ -105,9 +105,14 @@ class SocketWrapper {
                             console.table(json);
                             updateBoard(json);
                             break;
+                        case "chat":
+                            let chatlog = document.getElementById("chat-log");
+                            chatlog.value += json.content + "\n";
+                            chatlog.scrollTop = chatlog.scrollHeight;
+                            break;
                         default:
-                            console.log("unknown update action");
-
+                            console.log("unknown update action", json.action);
+                            break;
                     }
                     break;
             }
@@ -143,6 +148,9 @@ const checkRooms = async function (userId) {
                  : "join"
         let button = makeElement("button", action);
         button.addEventListener("click", function () {
+            if(action !== "leave") {
+                userData.roomId = id;
+            }
             socket.sendJSON({
                 type: `${action}-game`,
                 roomId: id,
@@ -221,12 +229,18 @@ window.addEventListener("load", async function () {
         stateMenuDisplay.style.display = "none";
         statePlayingDisplay.style.display = "block";
     };
-    initializeBoard = (width, config, perspective) => {
-        board = Board.ofWidth(width, Configs[config]());
+    switchMenu = () => {
+        stateMenuDisplay.style.display = "block";
+        statePlayingDisplay.style.display = "none";
+    };
+    initializeBoard = (config, perspective) => {
+        let { width, state } = Configs[config]()
+        board = Board.ofWidth(width, state);
         board.setPerspective(perspective);
         board.initialize(game, info);
         board.render();
         board.setSocket(socket);
+        document.getElementById("chat-log").value = "";
     };
     updateBoard = (json) => {
         board.receiveUpdate(json);
@@ -248,20 +262,50 @@ window.addEventListener("load", async function () {
     let game = document.getElementById("game");
     let info = document.getElementById("info");
 
-
-    let randomMove = document.getElementById("randomMove");
-    randomMove.addEventListener("click", function () {
-        board.randomMove();
+    let leaveButton = document.getElementById("leave");
+    leaveButton.addEventListener("click", function () {
+        socket.sendJSON({
+            type: "leave-game",
+            roomId: userData.roomId,
+            userId: userData.userId,
+            serverToken: userData.serverToken,
+        });
+        switchMenu();
     });
-
-    let reset = document.getElementById("reset");
-    reset.addEventListener("click", function () {
-        board.reset();
-        board.render();
+    let chatInput = document.getElementById("chat-input");
+    let chatSendButton = document.getElementById("chat-send-message");
+    let sendChatMessage = () => {
+        socket.sendJSON({
+            type: "send-message",
+            content: chatInput.value,
+            userId: userData.userId,
+            serverToken: userData.serverToken,
+        });
+        chatInput.value = "";
+    };
+    chatInput.addEventListener("keydown", (ev) => {
+        if(ev.key === "Enter") {
+            sendChatMessage();
+        }
     });
+    chatSendButton.addEventListener("click", sendChatMessage);
 
-    let randomGame = document.getElementById("randomGame");
-    randomGame.addEventListener("click", function () {
-        console.log(board.runRandom());
-    });
+    // outdated
+    if(false) {
+        let randomMove = document.getElementById("randomMove");
+        randomMove.addEventListener("click", function () {
+            board.randomMove();
+        });
+
+        let reset = document.getElementById("reset");
+        reset.addEventListener("click", function () {
+            board.reset();
+            board.render();
+        });
+
+        let randomGame = document.getElementById("randomGame");
+        randomGame.addEventListener("click", function () {
+            console.log(board.runRandom());
+        });
+    }
 });

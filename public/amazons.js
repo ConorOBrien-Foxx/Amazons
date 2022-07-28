@@ -172,7 +172,7 @@ let deepClone = function (arr) {
     if(Array.isArray(arr)) {
         return arr.map(deepClone);
     }
-    else if(arr.clone) {
+    else if(arr?.clone) {
         return arr.clone();
     }
     else {
@@ -287,11 +287,13 @@ class Board {
         if(this.validMovesLeft() === 0) {
             if(!this.silent) {
                 setTimeout(() => {
+                    // TODO: let game server test
                     notice(Board.getColor(this.turnPlayer) + " has lost.");
                 }, 50);
             }
             this.playing = false;
         }
+        return !this.playing;
     }
 
     cellOpen(i, j) {
@@ -437,7 +439,7 @@ class Board {
                 this.deliverUpdate({
                     label: "setFocus",
                     args: [i, j]
-                })
+                });
             }
             this.render(game);//TODO: why does this have a parameter?
         }
@@ -612,39 +614,53 @@ class BoardSimulation extends Board {
 }
 
 const Configs = {
-    Classic: () => [
-        new Amazon(0,  0, 3),
-        new Amazon(0,  3, 0),
-        new Amazon(0,  0, 6),
-        new Amazon(0,  3, 9),
+    Simple: () => ({
+        width: 4,
+        state: [
+            new Amazon(0,  0, 0),
 
-        new Amazon(1,  6, 0),
-        new Amazon(1,  9, 3),
-        new Amazon(1,  6, 9),
-        new Amazon(1,  9, 6),
-    ],
-    Advanced: () => [
-        new Steed (0,  2, 2),
-        new Steed (0,  2, 7),
+            new Amazon(1,  3, 3),
+        ],
+    }),
+    Classic: () => ({
+        width: 10,
+        state: [
+            new Amazon(0,  0, 3),
+            new Amazon(0,  3, 0),
+            new Amazon(0,  0, 6),
+            new Amazon(0,  3, 9),
 
-        new Amazon(0,  0, 3),
-        new Amazon(0,  3, 0),
-        new Amazon(0,  0, 6),
-        new Amazon(0,  3, 9),
+            new Amazon(1,  6, 0),
+            new Amazon(1,  9, 3),
+            new Amazon(1,  6, 9),
+            new Amazon(1,  9, 6),
+        ],
+    }),
+    Advanced: () => ({
+        width: 10,
+        state: [
+            new Steed (0,  2, 2),
+            new Steed (0,  2, 7),
 
-        new Bomber(0, 4, 4),
-        new Bomber(0, 4, 5),
-        new Bomber(1, 5, 4),
-        new Bomber(1, 5, 5),
+            new Amazon(0,  0, 3),
+            new Amazon(0,  3, 0),
+            new Amazon(0,  0, 6),
+            new Amazon(0,  3, 9),
 
-        new Amazon(1,  6, 0),
-        new Amazon(1,  9, 3),
-        new Amazon(1,  6, 9),
-        new Amazon(1,  9, 6),
+            new Bomber(0, 4, 4),
+            new Bomber(0, 4, 5),
+            new Bomber(1, 5, 4),
+            new Bomber(1, 5, 5),
 
-        new Steed (1,  7, 2),
-        new Steed (1,  7, 7),
-    ],
+            new Amazon(1,  6, 0),
+            new Amazon(1,  9, 3),
+            new Amazon(1,  6, 9),
+            new Amazon(1,  9, 6),
+
+            new Steed (1,  7, 2),
+            new Steed (1,  7, 7),
+        ],
+    }),
 };
 
 if(typeof module !== "undefined") {
